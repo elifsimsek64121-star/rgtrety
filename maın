@@ -1,8 +1,9 @@
-// ╔══════════════════════════════════════════════════════════════════════════════╗
 // ║              MİLYONERSEN — ONLINE BİLGİ YARIŞI                            ║
 // ║   Firebase Auth (Google + Facebook + Guest) · Firestore · Live Duel        ║
 // ║   Leagues · AI Questions · Multi-Language (TR/EN)                          ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
+//
+// ── KURULUM REHBERİ ─────────────────────────────────────────────────────────────
 //
 // ── pubspec.yaml ────────────────────────────────────────────────────────────────
 // dependencies:
@@ -19,38 +20,57 @@
 //   shared_preferences: ^2.3.2
 //   intl: ^0.19.0
 //
-// ── Android Setup ───────────────────────────────────────────────────────────────
-// 1. google-services.json → android/app/
-// 2. In android/app/src/main/res/values/strings.xml:
-//    <string name="facebook_app_id">YOUR_FACEBOOK_APP_ID</string>
-//    <string name="fb_login_protocol_scheme">fbYOUR_FACEBOOK_APP_ID</string>
-//    <string name="facebook_client_token">YOUR_CLIENT_TOKEN</string>
-// 3. In AndroidManifest.xml add Facebook meta-data and activity (see flutter_facebook_auth docs)
-// 4. SHA-1 & SHA-256 fingerprints added in Firebase console
+// ── GERÇEK CİHAZDA GİRİŞ SORUNU (EN YAYGIN NEDEN) ─────────────────────────────
 //
-// ── iOS Setup ───────────────────────────────────────────────────────────────────
-// 1. GoogleService-Info.plist → ios/Runner/
-// 2. Info.plist: Add FacebookAppID, FacebookClientToken, LSApplicationQueriesSchemes
-// 3. URL schemes: fb[APP_ID] and REVERSED_CLIENT_ID
+// ADIM 1: SHA Parmak İzleri
+//   Terminal'de çalıştır:
+//   cd android && ./gradlew signingReport
+//   Çıktıdan SHA-1 ve SHA-256 değerlerini kopyala.
+//   Firebase Console → Project Settings → Android App → Add fingerprint
+//   HER BUILD VARIANT için ekle: debug + release
 //
-// ── Firebase Console ────────────────────────────────────────────────────────────
-// Enable: Authentication → Google, Facebook, Anonymous
-// Firestore: create database, set rules (authenticated read/write own docs)
-// Firestore indexes: users(xp desc), duels(status, createdAt desc)
+// ADIM 2: google-services.json
+//   SHA ekledikten sonra google-services.json'u Firebase'den YENİDEN indir.
+//   android/app/ klasörüne kopyala (eskisinin üzerine yaz).
 //
-// ── Firestore Security Rules ────────────────────────────────────────────────────
-// rules_version = '2';
-// service cloud.firestore {
-//   match /databases/{database}/documents {
-//     match /users/{userId} {
-//       allow read: if request.auth != null;
-//       allow write: if request.auth != null && request.auth.uid == userId;
-//     }
-//     match /duels/{duelId} {
-//       allow read, write: if request.auth != null;
+// ADIM 3: Android manifest
+//   android/app/src/main/AndroidManifest.xml içinde <application> tag'ine ekle:
+//   android:usesCleartextTraffic="true"  (debug için)
+//
+// ADIM 4: Google Sign-In için
+//   Firebase Console → Authentication → Sign-in method → Google → Enable
+//   Support email ekle (zorunlu)
+//   google-services.json'da "oauth_client" bloğu var mı kontrol et
+//
+// ADIM 5: Facebook Sign-In için
+//   android/app/src/main/res/values/strings.xml:
+//   <string name="facebook_app_id">YOUR_APP_ID</string>
+//   <string name="fb_login_protocol_scheme">fbYOUR_APP_ID</string>
+//   <string name="facebook_client_token">YOUR_CLIENT_TOKEN</string>
+//   AndroidManifest.xml'e Facebook meta-data ve activity ekle
+//
+// ADIM 6: Firestore
+//   Firebase Console → Firestore Database → Create database
+//   Rules:
+//   rules_version = '2';
+//   service cloud.firestore {
+//     match /databases/{database}/documents {
+//       match /users/{userId} {
+//         allow read: if request.auth != null;
+//         allow write: if request.auth != null && request.auth.uid == userId;
+//       }
+//       match /duels/{duelId} {
+//         allow read, write: if request.auth != null;
+//       }
+//       match /_healthcheck/{doc} {
+//         allow read, write: if true;
+//       }
 //     }
 //   }
-// }
+//
+// ── HATA AYIKLAMA ───────────────────────────────────────────────────────────────
+// Logcat filtrele: adb logcat | grep -E "(MILYONER|Firebase|GoogleSignIn|FlutterFacebook)"
+// ─────────────────────────────────────────────────────────────────────────────────
 
 import 'dart:async';
 import 'dart:convert';
@@ -78,9 +98,21 @@ class _ApiConfig {
 }
 
 class _AdConfig {
+  // Test ID'leri — production için kendi ID'lerinle değiştir
   static const banner = 'ca-app-pub-3940256099942544/6300978111';
   static const rewarded = 'ca-app-pub-3940256099942544/1033173712';
   static const interstitial = 'ca-app-pub-3940256099942544/5224354917';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  DEBUG LOGGER
+// ═══════════════════════════════════════════════════════════════════
+class _Log {
+  static void i(String tag, String msg) => debugPrint('✅ [MILYONER/$tag] $msg');
+  static void e(String tag, String msg, [Object? err]) =>
+      debugPrint('🔴 [MILYONER/$tag] $msg${err != null ? " — $err" : ""}');
+  static void w(String tag, String msg) =>
+      debugPrint('⚠️ [MILYONER/$tag] $msg');
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -89,10 +121,7 @@ class _AdConfig {
 class L10n {
   static String _lang = 'tr';
   static String get lang => _lang;
-
-  static void setLang(String l) {
-    _lang = l;
-  }
+  static void setLang(String l) => _lang = l;
 
   static const _tr = {
     'app_name': 'MİLYONERSEN',
@@ -114,7 +143,10 @@ class L10n {
     'login_failed': 'Giriş başarısız. Bilgilerinizi kontrol edin.',
     'register_failed': 'Kayıt başarısız. Şifre en az 6 karakter olmalı.',
     'google_failed': 'Google girişi başarısız.',
+    'google_sha_hint':
+        'Firebase Console\'a SHA parmak izi eklendiğinden emin olun.',
     'facebook_failed': 'Facebook girişi başarısız.',
+    'network_error': 'İnternet bağlantısını kontrol edin.',
     'play': '🎮  OYUNA BAŞLA',
     'duel': '⚔️  CANLI DÜELLO',
     'ai_mode': '🤖  AI SORU MODU',
@@ -255,6 +287,12 @@ class L10n {
     'swap_sub': 'Başka soru alın',
     'confident': 'eminim!',
     'friend_answer': 'cevabı olduğundan %',
+    'firestore_error': 'Veritabanı bağlantı hatası',
+    'firestore_hint':
+        'Firebase Console\'da Firestore Database oluşturulduğundan emin olun.',
+    'retry': 'Tekrar Dene',
+    'error_title': 'Bir Hata Oluştu',
+    'sign_in_cancelled': 'Giriş iptal edildi.',
   };
 
   static const _en = {
@@ -278,7 +316,10 @@ class L10n {
     'register_failed':
         'Registration failed. Password must be at least 6 chars.',
     'google_failed': 'Google sign-in failed.',
+    'google_sha_hint':
+        'Make sure SHA fingerprints are added in Firebase Console.',
     'facebook_failed': 'Facebook sign-in failed.',
+    'network_error': 'Please check your internet connection.',
     'play': '🎮  PLAY NOW',
     'duel': '⚔️  LIVE DUEL',
     'ai_mode': '🤖  AI QUIZ MODE',
@@ -419,6 +460,12 @@ class L10n {
     'swap_sub': 'Get another question',
     'confident': 'confident!',
     'friend_answer': 'answer with ',
+    'firestore_error': 'Database connection error',
+    'firestore_hint':
+        'Make sure Firestore Database is created in Firebase Console.',
+    'retry': 'Retry',
+    'error_title': 'An Error Occurred',
+    'sign_in_cancelled': 'Sign-in was cancelled.',
   };
 
   static String t(String key) {
@@ -594,140 +641,338 @@ class Level {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+//  AUTH ERROR PARSER — Hataları kullanıcıya anlaşılır göster
+// ═══════════════════════════════════════════════════════════════════
+class AuthErrorParser {
+  static String parse(Object error) {
+    if (error is FirebaseAuthException) {
+      _Log.e('AUTH', 'FirebaseAuthException code=${error.code}', error.message);
+      switch (error.code) {
+        case 'user-not-found':
+          return L10n.lang == 'tr'
+              ? 'Bu e-posta ile kayıtlı kullanıcı bulunamadı.'
+              : 'No user found with this email.';
+        case 'wrong-password':
+          return L10n.lang == 'tr' ? 'Şifre yanlış.' : 'Wrong password.';
+        case 'email-already-in-use':
+          return L10n.lang == 'tr'
+              ? 'Bu e-posta zaten kullanımda.'
+              : 'Email already in use.';
+        case 'weak-password':
+          return L10n.lang == 'tr'
+              ? 'Şifre en az 6 karakter olmalı.'
+              : 'Password must be at least 6 characters.';
+        case 'invalid-email':
+          return L10n.lang == 'tr'
+              ? 'Geçersiz e-posta adresi.'
+              : 'Invalid email address.';
+        case 'too-many-requests':
+          return L10n.lang == 'tr'
+              ? 'Çok fazla deneme. Lütfen bekleyin.'
+              : 'Too many attempts. Please wait.';
+        case 'network-request-failed':
+          return L10n.t('network_error');
+        case 'sign_in_canceled':
+        case 'sign_in_cancelled':
+          return L10n.t('sign_in_cancelled');
+        case 'account-exists-with-different-credential':
+          return L10n.lang == 'tr'
+              ? 'Bu e-posta başka bir giriş yöntemiyle kayıtlı.'
+              : 'Account exists with different sign-in method.';
+        case 'invalid-credential':
+          return L10n.lang == 'tr'
+              ? 'Geçersiz kimlik bilgisi. SHA parmak izi eksik olabilir.'
+              : 'Invalid credential. SHA fingerprint may be missing.';
+        case 'DEVELOPER_ERROR':
+        case 'developer_error':
+          return L10n.lang == 'tr'
+              ? 'SHA-1 / SHA-256 parmak izi Firebase Console\'a eklenmemiş!'
+              : 'SHA-1/SHA-256 fingerprint not added in Firebase Console!';
+        default:
+          return '${error.code}: ${error.message ?? "Bilinmeyen hata"}';
+      }
+    }
+
+    final msg = error.toString().toLowerCase();
+    _Log.e('AUTH', 'General error', error);
+
+    if (msg.contains('network') || msg.contains('connection')) {
+      return L10n.t('network_error');
+    }
+    if (msg.contains('cancel') || msg.contains('abort')) {
+      return L10n.t('sign_in_cancelled');
+    }
+    if (msg.contains('developer_error') || msg.contains('10:')) {
+      return L10n.lang == 'tr'
+          ? 'SHA-1 parmak izi Firebase\'e eklenmemiş! Firebase Console → Project Settings → Android app → Add fingerprint'
+          : 'SHA-1 fingerprint not added to Firebase! Go to Firebase Console → Project Settings → Android app → Add fingerprint';
+    }
+    if (msg.contains('12500') || msg.contains('sign_in_failed')) {
+      return L10n.lang == 'tr'
+          ? 'Google Play Services hatası. Cihazınızda Google Play güncel mi?'
+          : 'Google Play Services error. Is Google Play up to date?';
+    }
+    return error.toString();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 //  FIREBASE SERVICE
 // ═══════════════════════════════════════════════════════════════════
 class FirebaseService {
   static final _auth = FirebaseAuth.instance;
   static final _db = FirebaseFirestore.instance;
-  static final _google = GoogleSignIn();
+  // GoogleSignIn — webClientId opsiyonel ama bazı cihazlarda gerekli olabilir.
+  // Firebase Console → Project Settings → Web API key'i buraya ekle:
+  static final _google = GoogleSignIn(
+    // scopes: ['email'], // opsiyonel
+    // serverClientId: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com',
+  );
 
   static User? get user => _auth.currentUser;
   static String? get uid => user?.uid;
   static bool get isGuest => user?.isAnonymous ?? false;
 
-  // ── Google ──
-  static Future<User?> signInWithGoogle() async {
+  // ── Firestore bağlantı testi ──────────────────────────────────────
+  static Future<bool> testFirestoreConnection() async {
     try {
+      await _db
+          .collection('_healthcheck')
+          .doc('ping')
+          .get()
+          .timeout(const Duration(seconds: 10));
+      _Log.i('FIRESTORE', 'Bağlantı testi başarılı');
+      return true;
+    } on FirebaseException catch (e) {
+      _Log.e('FIRESTORE', 'Bağlantı testi başarısız: ${e.code}', e.message);
+      return false;
+    } catch (e) {
+      _Log.e('FIRESTORE', 'Bağlantı testi genel hata', e);
+      return false;
+    }
+  }
+
+  // ── Google ──────────────────────────────────────────────────────────
+  static Future<_AuthResult> signInWithGoogle() async {
+    _Log.i('GOOGLE', 'signInWithGoogle başlıyor...');
+    try {
+      // Önce mevcut oturumu temizle — bazı cihazlarda eski token sorun çıkarır
+      await _google.signOut().catchError((_) {});
+
       final acc = await _google.signIn();
-      if (acc == null) return null;
+      if (acc == null) {
+        _Log.w('GOOGLE', 'Kullanıcı Google seçimini iptal etti');
+        return _AuthResult(null, L10n.t('sign_in_cancelled'));
+      }
+      _Log.i('GOOGLE', 'Google hesabı seçildi: ${acc.email}');
+
       final g = await acc.authentication;
+      _Log.i(
+        'GOOGLE',
+        'Token alındı — accessToken: ${g.accessToken != null}, idToken: ${g.idToken != null}',
+      );
+
+      if (g.idToken == null) {
+        _Log.e('GOOGLE', 'idToken null — SHA parmak izi eksik olabilir');
+        return _AuthResult(
+          null,
+          L10n.lang == 'tr'
+              ? 'Google token alınamadı. SHA-1 parmak izi Firebase Console\'a eklenmiş mi?'
+              : 'Failed to get Google token. Is SHA-1 added in Firebase Console?',
+        );
+      }
+
       final cred = GoogleAuthProvider.credential(
         accessToken: g.accessToken,
         idToken: g.idToken,
       );
+
       final r = await _auth.signInWithCredential(cred);
+      _Log.i('GOOGLE', 'Firebase Auth başarılı: ${r.user?.uid}');
       await _ensureProfile(r.user);
-      return r.user;
-    } catch (e) {
-      debugPrint('Google: $e');
-      return null;
+      return _AuthResult(r.user, null);
+    } on FirebaseAuthException catch (e) {
+      _Log.e('GOOGLE', 'FirebaseAuthException: ${e.code}', e.message);
+      return _AuthResult(null, AuthErrorParser.parse(e));
+    } catch (e, st) {
+      _Log.e('GOOGLE', 'Genel hata', e);
+      _Log.e('GOOGLE', st.toString());
+      return _AuthResult(null, AuthErrorParser.parse(e));
     }
   }
 
-  // ── Facebook ──
-  static Future<User?> signInWithFacebook() async {
+  // ── Facebook ──────────────────────────────────────────────────────
+  static Future<_AuthResult> signInWithFacebook() async {
+    _Log.i('FACEBOOK', 'signInWithFacebook başlıyor...');
     try {
-      final result = await FacebookAuth.instance.login();
-      if (result.status != LoginStatus.success) return null;
-      final cred = FacebookAuthProvider.credential(
-        result.accessToken!.tokenString,
+      final result = await FacebookAuth.instance.login(
+        permissions: ['email', 'public_profile'],
       );
+      _Log.i('FACEBOOK', 'Login status: ${result.status}');
+
+      if (result.status == LoginStatus.cancelled) {
+        return _AuthResult(null, L10n.t('sign_in_cancelled'));
+      }
+      if (result.status != LoginStatus.success) {
+        _Log.e('FACEBOOK', 'Login failed: ${result.message}');
+        return _AuthResult(
+          null,
+          '${L10n.t('facebook_failed')}: ${result.message}',
+        );
+      }
+
+      final token = result.accessToken?.tokenString;
+      if (token == null) {
+        return _AuthResult(null, L10n.t('facebook_failed'));
+      }
+
+      final cred = FacebookAuthProvider.credential(token);
       final r = await _auth.signInWithCredential(cred);
+      _Log.i('FACEBOOK', 'Firebase Auth başarılı: ${r.user?.uid}');
       await _ensureProfile(r.user);
-      return r.user;
-    } catch (e) {
-      debugPrint('Facebook: $e');
-      return null;
+      return _AuthResult(r.user, null);
+    } on FirebaseAuthException catch (e) {
+      _Log.e('FACEBOOK', 'FirebaseAuthException: ${e.code}', e.message);
+      return _AuthResult(null, AuthErrorParser.parse(e));
+    } catch (e, st) {
+      _Log.e('FACEBOOK', 'Genel hata', e);
+      _Log.e('FACEBOOK', st.toString());
+      return _AuthResult(null, AuthErrorParser.parse(e));
     }
   }
 
-  // ── Guest (Anonymous) ──
-  static Future<User?> signInAsGuest() async {
+  // ── Guest ─────────────────────────────────────────────────────────
+  static Future<_AuthResult> signInAsGuest() async {
+    _Log.i('GUEST', 'signInAnonymously başlıyor...');
     try {
       final r = await _auth.signInAnonymously();
+      _Log.i('GUEST', 'Başarılı: ${r.user?.uid}');
       await _ensureProfile(r.user, displayName: L10n.t('guest_name'));
-      return r.user;
-    } catch (e) {
-      debugPrint('Guest: $e');
-      return null;
+      return _AuthResult(r.user, null);
+    } on FirebaseAuthException catch (e) {
+      _Log.e('GUEST', 'FirebaseAuthException: ${e.code}', e.message);
+      return _AuthResult(null, AuthErrorParser.parse(e));
+    } catch (e, st) {
+      _Log.e('GUEST', 'Genel hata', e);
+      _Log.e('GUEST', st.toString());
+      return _AuthResult(null, AuthErrorParser.parse(e));
     }
   }
 
-  // ── Email ──
-  static Future<User?> signInWithEmail(String email, String pass) async {
+  // ── Email ─────────────────────────────────────────────────────────
+  static Future<_AuthResult> signInWithEmail(String email, String pass) async {
+    _Log.i('EMAIL', 'signInWithEmail: $email');
     try {
       final r = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: pass,
+        email: email.trim(),
+        password: pass.trim(),
       );
+      _Log.i('EMAIL', 'Başarılı: ${r.user?.uid}');
       await _ensureProfile(r.user);
-      return r.user;
-    } catch (e) {
-      debugPrint('Email login: $e');
-      return null;
+      return _AuthResult(r.user, null);
+    } on FirebaseAuthException catch (e) {
+      _Log.e('EMAIL', 'FirebaseAuthException: ${e.code}', e.message);
+      return _AuthResult(null, AuthErrorParser.parse(e));
+    } catch (e, st) {
+      _Log.e('EMAIL', 'Genel hata', e);
+      _Log.e('EMAIL', st.toString());
+      return _AuthResult(null, AuthErrorParser.parse(e));
     }
   }
 
-  static Future<User?> registerWithEmail(
+  static Future<_AuthResult> registerWithEmail(
     String email,
     String pass,
     String name,
   ) async {
+    _Log.i('EMAIL', 'registerWithEmail: $email, name: $name');
     try {
       final r = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: pass,
+        email: email.trim(),
+        password: pass.trim(),
       );
-      await r.user?.updateDisplayName(name);
-      await _ensureProfile(r.user, displayName: name);
-      return r.user;
-    } catch (e) {
-      debugPrint('Register: $e');
-      return null;
+      await r.user?.updateDisplayName(name.trim());
+      _Log.i('EMAIL', 'Kayıt başarılı: ${r.user?.uid}');
+      await _ensureProfile(r.user, displayName: name.trim());
+      return _AuthResult(r.user, null);
+    } on FirebaseAuthException catch (e) {
+      _Log.e('EMAIL', 'Register FirebaseAuthException: ${e.code}', e.message);
+      return _AuthResult(null, AuthErrorParser.parse(e));
+    } catch (e, st) {
+      _Log.e('EMAIL', 'Register genel hata', e);
+      _Log.e('EMAIL', st.toString());
+      return _AuthResult(null, AuthErrorParser.parse(e));
     }
   }
 
-  // ── Sign Out ──
+  // ── Sign Out ──────────────────────────────────────────────────────
   static Future<void> signOut() async {
+    _Log.i('AUTH', 'signOut başlıyor');
     await _google.signOut().catchError((_) {});
     await FacebookAuth.instance.logOut().catchError((_) {});
     await _auth.signOut();
+    _Log.i('AUTH', 'signOut tamamlandı');
   }
 
-  // ── Profile ──
+  // ── Profile ───────────────────────────────────────────────────────
   static Future<void> _ensureProfile(User? u, {String? displayName}) async {
     if (u == null) return;
-    final ref = _db.collection('users').doc(u.uid);
-    final snap = await ref.get();
-    if (!snap.exists) {
-      await ref.set({
-        'uid': u.uid,
-        'name': displayName ?? u.displayName ?? L10n.t('guest_name'),
-        'email': u.email ?? '',
-        'photoUrl': u.photoURL ?? '',
-        'xp': 0,
-        'totalCorrect': 0,
-        'totalGames': 0,
-        'duelsWon': 0,
-        'duelsLost': 0,
-        'bestPrize': '0',
-        'streak': 0,
-        'lastLogin': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'badges': <String>[],
-        'aiQuestionsGenerated': 0,
-        'isGuest': u.isAnonymous,
-        'lang': L10n.lang,
-      });
-    } else {
-      await ref.update({'lastLogin': FieldValue.serverTimestamp()});
+    _Log.i('PROFILE', '_ensureProfile: ${u.uid}');
+    try {
+      final ref = _db.collection('users').doc(u.uid);
+      final snap = await ref.get().timeout(const Duration(seconds: 15));
+      if (!snap.exists) {
+        await ref.set({
+          'uid': u.uid,
+          'name': displayName ?? u.displayName ?? L10n.t('guest_name'),
+          'email': u.email ?? '',
+          'photoUrl': u.photoURL ?? '',
+          'xp': 0,
+          'totalCorrect': 0,
+          'totalGames': 0,
+          'duelsWon': 0,
+          'duelsLost': 0,
+          'bestPrize': '0',
+          'streak': 0,
+          'lastLogin': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+          'badges': <String>[],
+          'aiQuestionsGenerated': 0,
+          'isGuest': u.isAnonymous,
+          'lang': L10n.lang,
+        });
+        _Log.i('PROFILE', 'Yeni profil oluşturuldu: ${u.uid}');
+      } else {
+        await ref.update({'lastLogin': FieldValue.serverTimestamp()});
+        _Log.i('PROFILE', 'lastLogin güncellendi: ${u.uid}');
+      }
+    } on FirebaseException catch (e) {
+      // Auth başarılıysa profil hatası uygulamayı durdurmamalı
+      _Log.e('PROFILE', 'FirebaseException: ${e.code}', e.message);
+    } on TimeoutException catch (e) {
+      _Log.e('PROFILE', 'Timeout', e);
+    } catch (e, st) {
+      _Log.e('PROFILE', 'Genel hata', e);
+      _Log.e('PROFILE', st.toString());
     }
   }
 
   static Future<Map<String, dynamic>?> getProfile() async {
     if (uid == null) return null;
-    final snap = await _db.collection('users').doc(uid).get();
-    return snap.data();
+    try {
+      final snap = await _db
+          .collection('users')
+          .doc(uid)
+          .get()
+          .timeout(const Duration(seconds: 10));
+      return snap.data();
+    } on FirebaseException catch (e) {
+      _Log.e('PROFILE', 'getProfile FirebaseException: ${e.code}', e.message);
+      return null;
+    } catch (e) {
+      _Log.e('PROFILE', 'getProfile hata', e);
+      return null;
+    }
   }
 
   static Future<void> updateStats({
@@ -736,114 +981,156 @@ class FirebaseService {
     required String bestPrize,
   }) async {
     if (uid == null) return;
-    final ref = _db.collection('users').doc(uid!);
-    await ref.update({
-      'xp': FieldValue.increment(xpGain),
-      'totalCorrect': FieldValue.increment(correctCount),
-      'totalGames': FieldValue.increment(1),
-    });
-    final snap = await ref.get();
-    final data = snap.data() ?? {};
-    final currentBest =
-        int.tryParse(
-          (data['bestPrize'] ?? '0').toString().replaceAll(
-            RegExp(r'[^0-9]'),
-            '',
-          ),
-        ) ??
-        0;
-    final newBest =
-        int.tryParse(bestPrize.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-    if (newBest > currentBest) await ref.update({'bestPrize': bestPrize});
-    await _checkBadges();
+    try {
+      final ref = _db.collection('users').doc(uid!);
+      await ref.update({
+        'xp': FieldValue.increment(xpGain),
+        'totalCorrect': FieldValue.increment(correctCount),
+        'totalGames': FieldValue.increment(1),
+      });
+      final snap = await ref.get();
+      final data = snap.data() ?? {};
+      final currentBest =
+          int.tryParse(
+            (data['bestPrize'] ?? '0').toString().replaceAll(
+              RegExp(r'[^0-9]'),
+              '',
+            ),
+          ) ??
+          0;
+      final newBest =
+          int.tryParse(bestPrize.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      if (newBest > currentBest) await ref.update({'bestPrize': bestPrize});
+      await _checkBadges();
+    } on FirebaseException catch (e) {
+      _Log.e('STATS', 'updateStats: ${e.code}', e.message);
+    } catch (e) {
+      _Log.e('STATS', 'updateStats hata', e);
+    }
   }
 
   static Future<void> _checkBadges() async {
     if (uid == null) return;
-    final snap = await _db.collection('users').doc(uid!).get();
-    final data = snap.data() ?? {};
-    final xp = (data['xp'] ?? 0) as int;
-    final correct = (data['totalCorrect'] ?? 0) as int;
-    final badges = List<String>.from(data['badges'] ?? []);
-    bool changed = false;
-    void maybe(String b, bool c) {
-      if (c && !badges.contains(b)) {
-        badges.add(b);
-        changed = true;
+    try {
+      final snap = await _db.collection('users').doc(uid!).get();
+      final data = snap.data() ?? {};
+      final xp = (data['xp'] ?? 0) as int;
+      final correct = (data['totalCorrect'] ?? 0) as int;
+      final badges = List<String>.from(data['badges'] ?? []);
+      bool changed = false;
+      void maybe(String b, bool c) {
+        if (c && !badges.contains(b)) {
+          badges.add(b);
+          changed = true;
+        }
       }
-    }
 
-    maybe('first_game', true);
-    maybe('xp_500', xp >= 500);
-    maybe('xp_1500', xp >= 1500);
-    maybe('xp_4000', xp >= 4000);
-    maybe('xp_9000', xp >= 9000);
-    maybe('correct_50', correct >= 50);
-    maybe('correct_200', correct >= 200);
-    if (changed)
-      await _db.collection('users').doc(uid!).update({'badges': badges});
+      maybe('first_game', true);
+      maybe('xp_500', xp >= 500);
+      maybe('xp_1500', xp >= 1500);
+      maybe('xp_4000', xp >= 4000);
+      maybe('xp_9000', xp >= 9000);
+      maybe('correct_50', correct >= 50);
+      maybe('correct_200', correct >= 200);
+      if (changed) {
+        await _db.collection('users').doc(uid!).update({'badges': badges});
+      }
+    } on FirebaseException catch (e) {
+      _Log.e('BADGES', '${e.code}', e.message);
+    } catch (e) {
+      _Log.e('BADGES', 'hata', e);
+    }
   }
 
-  // ── Daily Reward ──
+  // ── Daily Reward ──────────────────────────────────────────────────
   static Future<Map<String, dynamic>> claimDailyReward() async {
     if (uid == null || isGuest) return {'claimed': false};
-    final ref = _db.collection('users').doc(uid!);
-    final snap = await ref.get();
-    final data = snap.data() ?? {};
-    final last = (data['lastRewardDate'] as Timestamp?)?.toDate();
-    final today = DateTime.now();
-    final streak = (data['streak'] ?? 0) as int;
-    if (last != null &&
-        last.year == today.year &&
-        last.month == today.month &&
-        last.day == today.day) {
-      return {'claimed': false, 'streak': streak};
+    try {
+      final ref = _db.collection('users').doc(uid!);
+      final snap = await ref.get().timeout(const Duration(seconds: 10));
+      final data = snap.data() ?? {};
+      final last = (data['lastRewardDate'] as Timestamp?)?.toDate();
+      final today = DateTime.now();
+      final streak = (data['streak'] ?? 0) as int;
+      if (last != null &&
+          last.year == today.year &&
+          last.month == today.month &&
+          last.day == today.day) {
+        return {'claimed': false, 'streak': streak};
+      }
+      final newStreak = (last != null && today.difference(last).inDays == 1)
+          ? streak + 1
+          : 1;
+      final reward = newStreak >= 30
+          ? 300
+          : newStreak >= 14
+          ? 200
+          : newStreak >= 7
+          ? 150
+          : newStreak >= 3
+          ? 100
+          : 50;
+      await ref.update({
+        'lastRewardDate': FieldValue.serverTimestamp(),
+        'streak': newStreak,
+        'xp': FieldValue.increment(reward),
+      });
+      return {'claimed': true, 'streak': newStreak, 'xp': reward};
+    } on FirebaseException catch (e) {
+      _Log.e('REWARD', '${e.code}', e.message);
+      return {'claimed': false};
+    } catch (e) {
+      _Log.e('REWARD', 'hata', e);
+      return {'claimed': false};
     }
-    final newStreak = (last != null && today.difference(last).inDays == 1)
-        ? streak + 1
-        : 1;
-    final reward = newStreak >= 30
-        ? 300
-        : newStreak >= 14
-        ? 200
-        : newStreak >= 7
-        ? 150
-        : newStreak >= 3
-        ? 100
-        : 50;
-    await ref.update({
-      'lastRewardDate': FieldValue.serverTimestamp(),
-      'streak': newStreak,
-      'xp': FieldValue.increment(reward),
-    });
-    return {'claimed': true, 'streak': newStreak, 'xp': reward};
   }
 
-  // ── Leaderboard ──
+  // ── Leaderboard ───────────────────────────────────────────────────
   static Future<List<Map<String, dynamic>>> getLeaderboard({
     int limit = 50,
   }) async {
-    final snap = await _db
-        .collection('users')
-        .orderBy('xp', descending: true)
-        .limit(limit)
-        .get();
-    return snap.docs.map((d) => {...d.data(), 'uid': d.id}).toList();
+    try {
+      final snap = await _db
+          .collection('users')
+          .orderBy('xp', descending: true)
+          .limit(limit)
+          .get()
+          .timeout(const Duration(seconds: 10));
+      return snap.docs.map((d) => {...d.data(), 'uid': d.id}).toList();
+    } on FirebaseException catch (e) {
+      _Log.e('LEADERBOARD', '${e.code}', e.message);
+      return [];
+    } catch (e) {
+      _Log.e('LEADERBOARD', 'hata', e);
+      return [];
+    }
   }
 
   static Future<int> getMyRank() async {
     if (uid == null) return -1;
-    final mySnap = await _db.collection('users').doc(uid!).get();
-    final myXP = (mySnap.data()?['xp'] ?? 0) as int;
-    final higher = await _db
-        .collection('users')
-        .where('xp', isGreaterThan: myXP)
-        .count()
-        .get();
-    return (higher.count ?? 0) + 1;
+    try {
+      final mySnap = await _db
+          .collection('users')
+          .doc(uid!)
+          .get()
+          .timeout(const Duration(seconds: 10));
+      final myXP = (mySnap.data()?['xp'] ?? 0) as int;
+      final higher = await _db
+          .collection('users')
+          .where('xp', isGreaterThan: myXP)
+          .count()
+          .get();
+      return (higher.count ?? 0) + 1;
+    } on FirebaseException catch (e) {
+      _Log.e('RANK', '${e.code}', e.message);
+      return -1;
+    } catch (e) {
+      _Log.e('RANK', 'hata', e);
+      return -1;
+    }
   }
 
-  // ── Duel ──
+  // ── Duel ──────────────────────────────────────────────────────────
   static Future<String> createDuel(Map<String, dynamic> myData) async {
     final ref = await _db.collection('duels').add({
       'status': 'waiting',
@@ -880,7 +1167,11 @@ class FirebaseService {
         },
       });
       return true;
+    } on FirebaseException catch (e) {
+      _Log.e('DUEL', 'joinDuel: ${e.code}', e.message);
+      return false;
     } catch (e) {
+      _Log.e('DUEL', 'joinDuel hata', e);
       return false;
     }
   }
@@ -897,63 +1188,104 @@ class FirebaseService {
     required int timeMs,
   }) async {
     final points = correct ? (1000 - timeMs ~/ 10).clamp(100, 1000) : 0;
-    await _db.collection('duels').doc(duelId).update({
-      '$player.answers': FieldValue.arrayUnion([
-        {
-          'q': questionIdx,
-          'a': answerIdx,
-          'correct': correct,
-          'points': points,
-        },
-      ]),
-      '$player.score': FieldValue.increment(points),
-    });
+    try {
+      await _db.collection('duels').doc(duelId).update({
+        '$player.answers': FieldValue.arrayUnion([
+          {
+            'q': questionIdx,
+            'a': answerIdx,
+            'correct': correct,
+            'points': points,
+          },
+        ]),
+        '$player.score': FieldValue.increment(points),
+      });
+    } on FirebaseException catch (e) {
+      _Log.e('DUEL', 'updateDuelAnswer: ${e.code}', e.message);
+    } catch (e) {
+      _Log.e('DUEL', 'updateDuelAnswer hata', e);
+    }
   }
 
   static Future<void> finishDuel(String duelId, String player) async {
-    await _db.collection('duels').doc(duelId).update({
-      '$player.finished': true,
-    });
+    try {
+      await _db.collection('duels').doc(duelId).update({
+        '$player.finished': true,
+      });
+    } on FirebaseException catch (e) {
+      _Log.e('DUEL', 'finishDuel: ${e.code}', e.message);
+    } catch (e) {
+      _Log.e('DUEL', 'finishDuel hata', e);
+    }
   }
 
   static Future<List<Map<String, dynamic>>> findOpenDuels() async {
-    final snap = await _db
-        .collection('duels')
-        .where('status', isEqualTo: 'waiting')
-        .orderBy('createdAt', descending: true)
-        .limit(20)
-        .get();
-    return snap.docs
-        .where((d) => d.data()['player1']['uid'] != uid)
-        .map((d) => {...d.data(), 'id': d.id})
-        .toList();
+    try {
+      final snap = await _db
+          .collection('duels')
+          .where('status', isEqualTo: 'waiting')
+          .orderBy('createdAt', descending: true)
+          .limit(20)
+          .get()
+          .timeout(const Duration(seconds: 10));
+      return snap.docs
+          .where((d) => d.data()['player1']['uid'] != uid)
+          .map((d) => {...d.data(), 'id': d.id})
+          .toList();
+    } on FirebaseException catch (e) {
+      _Log.e('DUEL', 'findOpenDuels: ${e.code}', e.message);
+      return [];
+    } catch (e) {
+      _Log.e('DUEL', 'findOpenDuels hata', e);
+      return [];
+    }
   }
 
   static Future<void> setDuelQuestions(
     String duelId,
     List<Map<String, dynamic>> qs,
   ) async {
-    await _db.collection('duels').doc(duelId).update({
-      'questions': qs,
-      'status': 'active',
-      'startedAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      await _db.collection('duels').doc(duelId).update({
+        'questions': qs,
+        'status': 'active',
+        'startedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      _Log.e('DUEL', 'setDuelQuestions: ${e.code}', e.message);
+    } catch (e) {
+      _Log.e('DUEL', 'setDuelQuestions hata', e);
+    }
   }
 
   static Future<void> updateDuelResult(String duelId, String winnerUid) async {
     if (uid == null) return;
-    await _db.collection('duels').doc(duelId).update({
-      'status': 'finished',
-      'winnerUid': winnerUid,
-      'finishedAt': FieldValue.serverTimestamp(),
-    });
-    final isWinner = winnerUid == uid;
-    await _db.collection('users').doc(uid!).update({
-      if (isWinner) 'duelsWon': FieldValue.increment(1),
-      if (!isWinner) 'duelsLost': FieldValue.increment(1),
-      'xp': FieldValue.increment(isWinner ? 150 : 30),
-    });
+    try {
+      await _db.collection('duels').doc(duelId).update({
+        'status': 'finished',
+        'winnerUid': winnerUid,
+        'finishedAt': FieldValue.serverTimestamp(),
+      });
+      final isWinner = winnerUid == uid;
+      await _db.collection('users').doc(uid!).update({
+        if (isWinner) 'duelsWon': FieldValue.increment(1),
+        if (!isWinner) 'duelsLost': FieldValue.increment(1),
+        'xp': FieldValue.increment(isWinner ? 150 : 30),
+      });
+    } on FirebaseException catch (e) {
+      _Log.e('DUEL', 'updateDuelResult: ${e.code}', e.message);
+    } catch (e) {
+      _Log.e('DUEL', 'updateDuelResult hata', e);
+    }
   }
+}
+
+// Auth sonucu — null user + hata mesajı
+class _AuthResult {
+  final User? user;
+  final String? error;
+  const _AuthResult(this.user, this.error);
+  bool get success => user != null;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -973,13 +1305,10 @@ class SettingsService {
     L10n.setLang(v);
   }
 
-  static Future<void> setSound(bool v) async {
-    await _prefs.setBool('sound', v);
-  }
-
-  static Future<void> setNotifs(bool v) async {
-    await _prefs.setBool('notifs', v);
-  }
+  static Future<void> setSound(bool v) async =>
+      await _prefs.setBool('sound', v);
+  static Future<void> setNotifs(bool v) async =>
+      await _prefs.setBool('notifs', v);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -994,7 +1323,9 @@ class AIQuestionService {
     try {
       final lang = L10n.lang == 'tr' ? 'Türkçe' : 'English';
       final prompt =
-          '$lang dilinde bir bilgi yarışması için $count adet $difficulty zorlukta $topic konulu soru üret.\nSadece JSON array döndür, başka metin ekleme:\n[\n  {\n    "question": "soru",\n    "options": ["A","B","C","D"],\n    "correctAnswer": "doğru şık",\n    "difficulty": 3,\n    "topic": "$topic"\n  }\n]';
+          '$lang dilinde bir bilgi yarışması için $count adet $difficulty zorlukta $topic konulu soru üret.\n'
+          'Sadece JSON array döndür, başka metin ekleme:\n'
+          '[\n  {\n    "question": "soru",\n    "options": ["A","B","C","D"],\n    "correctAnswer": "doğru şık",\n    "difficulty": 3,\n    "topic": "$topic"\n  }\n]';
       final resp = await http
           .post(
             Uri.parse('https://api.anthropic.com/v1/messages'),
@@ -1034,7 +1365,7 @@ class AIQuestionService {
         return qs.cast<Map<String, dynamic>>();
       }
     } catch (e) {
-      debugPrint('AI question: $e');
+      _Log.e('AI', 'generateQuestions hata', e);
     }
     return [];
   }
@@ -1434,6 +1765,8 @@ class XPBar extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _Log.i('MAIN', 'Uygulama başlıyor...');
+
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.landscapeLeft,
@@ -1446,15 +1779,47 @@ void main() async {
       systemNavigationBarColor: Colors.black,
     ),
   );
+
   try {
     await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint('Firebase: $e');
+    _Log.i('MAIN', 'Firebase initialize başarılı');
+  } catch (e, st) {
+    _Log.e(
+      'MAIN',
+      'Firebase initialize HATASI — google-services.json eksik/yanlış?',
+      e,
+    );
+    _Log.e('MAIN', st.toString());
   }
+
   await SettingsService.init();
   L10n.setLang(SettingsService.lang);
-  MobileAds.instance.initialize().catchError((e) => debugPrint('AdMob: $e'));
+  MobileAds.instance.initialize().catchError(
+    (e) => _Log.e('ADS', 'init hata', e),
+  );
+
+  // Non-blocking Firestore testi
+  unawaited(
+    FirebaseService.testFirestoreConnection().then((ok) {
+      if (!ok) {
+        _Log.w('MAIN', '════════════════════════════════════════');
+        _Log.w('MAIN', 'FIRESTORE BAĞLANTI TESTİ BAŞARISIZ');
+        _Log.w(
+          'MAIN',
+          '1. Firebase Console → Firestore Database oluşturulmuş mu?',
+        );
+        _Log.w('MAIN', '2. Firestore kuralları erişime izin veriyor mu?');
+        _Log.w('MAIN', '3. İnternet bağlantısı?');
+        _Log.w('MAIN', '════════════════════════════════════════');
+      }
+    }),
+  );
+
   runApp(const MilyonerApp());
+}
+
+void unawaited(Future<void> future) {
+  future.catchError((e) => _Log.e('UNAWAITED', 'hata', e));
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1526,7 +1891,7 @@ class _SplashLoading extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  AUTH SCREEN
+//  AUTH SCREEN — Tam yeniden yazıldı: hata gösterimi + debug info
 // ═══════════════════════════════════════════════════════════════════
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -1540,6 +1905,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
   final _pass = TextEditingController();
   final _name = TextEditingController();
   String? _error;
+  String? _errorDetail; // teknik detay (debug için)
 
   late final AnimationController _ambient = AnimationController(
     vsync: this,
@@ -1559,93 +1925,92 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  Future<void> _doGoogle() async {
+  void _setError(String? msg, {String? detail}) {
+    if (!mounted) return;
+    setState(() {
+      _error = msg;
+      _errorDetail = detail;
+      _loading = false;
+    });
+  }
+
+  void _setLoading() {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
+      _errorDetail = null;
     });
-    final u = await FirebaseService.signInWithGoogle();
+  }
+
+  Future<void> _doGoogle() async {
+    _setLoading();
+    final result = await FirebaseService.signInWithGoogle();
     if (!mounted) return;
-    if (u == null)
-      setState(() {
-        _loading = false;
-        _error = L10n.t('google_failed');
-      });
-    else
+    if (!result.success) {
+      _setError(
+        result.error ?? L10n.t('google_failed'),
+        detail: L10n.t('google_sha_hint'),
+      );
+    } else {
       setState(() => _loading = false);
+    }
   }
 
   Future<void> _doFacebook() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    final u = await FirebaseService.signInWithFacebook();
+    _setLoading();
+    final result = await FirebaseService.signInWithFacebook();
     if (!mounted) return;
-    if (u == null)
-      setState(() {
-        _loading = false;
-        _error = L10n.t('facebook_failed');
-      });
-    else
+    if (!result.success) {
+      _setError(result.error ?? L10n.t('facebook_failed'));
+    } else {
       setState(() => _loading = false);
+    }
   }
 
   Future<void> _doGuest() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    final u = await FirebaseService.signInAsGuest();
+    _setLoading();
+    final result = await FirebaseService.signInAsGuest();
     if (!mounted) return;
-    if (u == null)
-      setState(() {
-        _loading = false;
-        _error = 'Guest failed.';
-      });
-    else
+    if (!result.success) {
+      _setError(result.error ?? 'Guest giriş başarısız.');
+    } else {
       setState(() => _loading = false);
+    }
   }
 
   Future<void> _doEmail() async {
     if (_email.text.isEmpty || _pass.text.isEmpty) {
-      setState(() => _error = L10n.t('email_required'));
+      _setError(L10n.t('email_required'));
       return;
     }
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    User? u;
+    if (_isRegister && _name.text.isEmpty) {
+      _setError(L10n.t('name_required'));
+      return;
+    }
+    _setLoading();
+    _AuthResult result;
     if (_isRegister) {
-      if (_name.text.isEmpty) {
-        setState(() {
-          _loading = false;
-          _error = L10n.t('name_required');
-        });
-        return;
-      }
-      u = await FirebaseService.registerWithEmail(
+      result = await FirebaseService.registerWithEmail(
         _email.text.trim(),
         _pass.text.trim(),
         _name.text.trim(),
       );
     } else {
-      u = await FirebaseService.signInWithEmail(
+      result = await FirebaseService.signInWithEmail(
         _email.text.trim(),
         _pass.text.trim(),
       );
     }
     if (!mounted) return;
-    if (u == null)
-      setState(() {
-        _loading = false;
-        _error = _isRegister
-            ? L10n.t('register_failed')
-            : L10n.t('login_failed');
-      });
-    else
+    if (!result.success) {
+      _setError(
+        result.error ??
+            (_isRegister ? L10n.t('register_failed') : L10n.t('login_failed')),
+      );
+    } else {
       setState(() => _loading = false);
+    }
   }
 
   @override
@@ -1677,7 +2042,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
               child: Column(
                 children: [
                   const SizedBox(height: 24),
-                  // Language toggle
+                  // Dil seçici
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -1772,7 +2137,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                   ),
                   const SizedBox(height: 10),
 
-                  // Guest
+                  // Misafir
                   _socialBtn(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1799,7 +2164,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                   ),
                   const SizedBox(height: 16),
 
-                  // Divider
                   Row(
                     children: [
                       Expanded(child: Container(height: 1, color: K.w20)),
@@ -1862,7 +2226,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  // Email form
                   if (_showEmail) ...[
                     const SizedBox(height: 12),
                     GlassBox(
@@ -1938,6 +2301,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                       onTap: () => setState(() {
                         _isRegister = !_isRegister;
                         _error = null;
+                        _errorDetail = null;
                       }),
                       child: Text(
                         _isRegister
@@ -1952,18 +2316,61 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                     ),
                   ],
 
+                  // Yüklenme göstergesi (email dışı)
+                  if (_loading && !_showEmail) ...[
+                    const SizedBox(height: 20),
+                    const CircularProgressIndicator(
+                      color: K.gold2,
+                      strokeWidth: 2,
+                    ),
+                  ],
+
+                  // HATA MESAJI — Artık her zaman görünür, detaylı
                   if (_error != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: K.wrong.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: K.wrong.withOpacity(0.3)),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: K.wrong.withOpacity(0.4)),
                       ),
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(color: K.wrong, fontSize: 13),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: K.wrong,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _error!,
+                                  style: const TextStyle(
+                                    color: K.wrong,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_errorDetail != null) ...[
+                            const SizedBox(height: 6),
+                            const Divider(color: K.w20, height: 1),
+                            const SizedBox(height: 6),
+                            Text(
+                              _errorDetail!,
+                              style: const TextStyle(
+                                color: K.w60,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
@@ -2018,7 +2425,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: bg == Colors.transparent ? null : bg,
-        gradient: bg == Colors.transparent ? null : null,
         border: border != null ? Border.all(color: border, width: 1) : null,
         boxShadow: bg != Colors.transparent
             ? [BoxShadow(color: bg.withOpacity(0.25), blurRadius: 16)]
@@ -2365,7 +2771,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
         const SizedBox(height: 24),
-
         if (_profile != null)
           Row(
             children: [
@@ -2385,7 +2790,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ),
         const SizedBox(height: 20),
-
         _menuBtn(
           L10n.t('play'),
           const LinearGradient(
@@ -2454,7 +2858,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         const SizedBox(height: 12),
         GestureDetector(
-          onTap: () => _confirmLogout(),
+          onTap: _confirmLogout,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -2820,6 +3224,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   List<Map<String, dynamic>> _board = [];
   bool _loading = true;
   int _myRank = -1;
+
   @override
   void initState() {
     super.initState();
@@ -3056,6 +3461,7 @@ class DuelLobbyScreen extends StatefulWidget {
 class _DuelLobbyScreenState extends State<DuelLobbyScreen> {
   List<Map<String, dynamic>> _openDuels = [];
   bool _loading = false;
+
   @override
   void initState() {
     super.initState();
@@ -3315,6 +3721,7 @@ class _DuelWaitingScreenState extends State<DuelWaitingScreen>
     vsync: this,
     duration: const Duration(milliseconds: 1200),
   )..repeat(reverse: true);
+
   @override
   void initState() {
     super.initState();
@@ -3361,6 +3768,7 @@ class _DuelWaitingScreenState extends State<DuelWaitingScreen>
         ..shuffle();
       return qs.take(10).toList();
     } catch (e) {
+      _Log.e('DUEL', 'loadQuestions hata', e);
       return [];
     }
   }
@@ -3924,7 +4332,6 @@ class StatsScreen extends StatelessWidget {
     final xp = (profile!['xp'] ?? 0) as int;
     final league = League.forXP(xp);
     final badges = (profile!['badges'] as List?)?.cast<String>() ?? [];
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -5274,10 +5681,11 @@ class _GameState extends State<GameScreen> with TickerProviderStateMixin {
       );
       _levelAd!.show();
       _levelAd = null;
-    } else
+    } else {
       Future.delayed(const Duration(milliseconds: 1200), () {
         if (mounted) _doLevelTransition();
       });
+    }
   }
 
   void _doLevelTransition() {
@@ -5311,9 +5719,8 @@ class _GameState extends State<GameScreen> with TickerProviderStateMixin {
   void _endGame() {
     _pauseTimer();
     final finalPrize = _guarantee(step);
-    final xpGain = _totalCorrect * 20 + lvlIdx * 50;
     FirebaseService.updateStats(
-      xpGain: xpGain,
+      xpGain: _totalCorrect * 20 + lvlIdx * 50,
       correctCount: _totalCorrect,
       bestPrize: finalPrize,
     );
@@ -5323,9 +5730,8 @@ class _GameState extends State<GameScreen> with TickerProviderStateMixin {
   void _giveUp() {
     _pauseTimer();
     final finalPrize = _guarantee(step > 0 ? step - 1 : 0);
-    final xpGain = _totalCorrect * 20 + lvlIdx * 50;
     FirebaseService.updateStats(
-      xpGain: xpGain,
+      xpGain: _totalCorrect * 20 + lvlIdx * 50,
       correctCount: _totalCorrect,
       bestPrize: finalPrize,
     );
@@ -6632,7 +7038,7 @@ class _LI {
   const _LI(this.emoji, this.label, this.used, this.color, this.onTap);
 }
 
-// ═══════════════════════════════════════════════════════════════════
+/// ═══════════════════════════════════════════════════════════════════
 //  DIALOGS
 // ═══════════════════════════════════════════════════════════════════
 Widget _glassDlg({required Widget child, required Color borderColor}) => Dialog(
