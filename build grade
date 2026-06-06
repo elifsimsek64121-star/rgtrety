@@ -1,0 +1,79 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+plugins {
+    id("com.android.application")
+    id("com.google.gms.google-services")
+    id("kotlin-android")
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+
+if (keystorePropertiesFile.exists()) {
+    FileInputStream(keystorePropertiesFile).use {
+        keystoreProperties.load(it)
+    }
+} else {
+    throw GradleException("key.properties dosyası bulunamadı!")
+}
+
+android {
+    namespace = "com.ismail.kim5milyon"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "com.ismail.kim5milyon"
+        minSdk = 24
+        targetSdk = 36
+        versionCode = 12
+        versionName = "1.0.12"
+
+        ndk {
+            abiFilters += listOf(
+                "arm64-v8a",
+                "armeabi-v7a",
+                "x86_64"
+            )
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"]?.toString()
+                ?: error("keyAlias eksik!")
+            keyPassword = keystoreProperties["keyPassword"]?.toString()
+                ?: error("keyPassword eksik!")
+            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
+                ?: error("storeFile eksik!")
+            storePassword = keystoreProperties["storePassword"]?.toString()
+                ?: error("storePassword eksik!")
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
